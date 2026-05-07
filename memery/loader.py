@@ -30,7 +30,10 @@ def verify_image(f: str):
         logging.exception('Skipping bad file: %s\ndue to %s', f, e)
         pass
 
-def archive_loader(filepaths: list[str], db: Any) -> tuple[set[str], list[str]]:
+def archive_loader(
+    filepaths: list[tuple[Path, str]],
+    db: dict[int, dict[str, Any]],
+) -> tuple[dict[int, dict[str, Any]], list[tuple[str, str]]]:
     # `filepaths` already only contains files that passed verify_image upstream
     # in get_valid_images, so re-verifying here is wasted work. Use a set for
     # O(1) hash lookups instead of an O(n) `in` against a list.

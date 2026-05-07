@@ -25,8 +25,10 @@ jobs:
         python-version: "3.12"
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install flake8 pytest poetry
+        python -m pip install --upgrade pip poetry
+        # `poetry install` picks up dev-dependencies (pytest, flake8) from
+        # the [tool.poetry.dev-dependencies] table, so we don't need to
+        # pip-install them separately and risk version skew.
         poetry install
     - name: Lint with flake8
       run: |

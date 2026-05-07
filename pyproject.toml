@@ -26,6 +26,7 @@ memery = "memery.cli:main"
 ipywidgets = "^7.7.0"
 ipython = "^8.3.0"
 pytest = "^8.0.0"
+flake8 = "^7.0.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

@@ -1,3 +1,5 @@
+from typing import Optional
+
 import torch
 from torch import Tensor, device
 from torch.utils.data import DataLoader, default_collate
@@ -15,7 +17,7 @@ def make_dataset(new_files: list[tuple[str, str]]) -> list[tuple[str, int]]:
     return [(str(path), i) for i, (path, _slug) in enumerate(new_files)]
 
 
-def pil_loader(path: str) -> Image.Image:
+def pil_loader(path: str) -> Optional[Image.Image]:
     """Open `path` and return an RGB PIL image, or None on failure.
 
     Uses PIL's JPEG `draft` mode to decode at the smallest IDCT scale that's
@@ -91,8 +93,8 @@ def clip_transform(n_px: int) -> Compose:
     ])
 
 
-def crafter(new_files: list[str], device: device,
-            batch_size: int = 128, num_workers: int = 0):
+def crafter(new_files: list[tuple[str, str]], device: device,
+            batch_size: int = 128, num_workers: int = 0) -> DataLoader:
     """Build the DataLoader used to feed CLIP.
 
     `num_workers=0` is the macOS default because DataLoader workers use
@@ -114,6 +116,6 @@ def crafter(new_files: list[str], device: device,
     return img_loader
 
 
-def preproc(img: Tensor) -> Compose:
-    transformed = clip_transform(224)(img)
-    return transformed
+def preproc(img: Image.Image) -> Tensor:
+    """Apply the CLIP preprocessing pipeline to a single PIL image."""
+    return clip_transform(224)(img)

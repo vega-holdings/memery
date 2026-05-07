@@ -20,8 +20,8 @@ def recall(
     negative: str = typer.Option(None, "-nt", "--negative-text", help="Negative text query"),
     image: str = typer.Option(None, "-i", "--image", help="Filepath to image query"),
     number: int = typer.Option(10, "-n", "--number", help="Number of results to return"),
-    ) -> list[str]:
-    """Search recursively over a folder from the command line"""
+    ) -> None:
+    """Search recursively over a folder from the command line."""
     memery = Memery()
     ranked = memery.query_flow(root, query=text, negative_query=negative, image_query=image)
     print(ranked[:number])
