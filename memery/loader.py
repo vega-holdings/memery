@@ -30,14 +30,23 @@ def verify_image(f: str):
         logging.exception('Skipping bad file: %s\ndue to %s', f, e)
         pass
 
-def archive_loader(filepaths: list[str], db: Any) -> tuple[ set[str], list[str] ]: # Just guessing on the return type
-
-    current_hashes = [hash for path, hash in filepaths]
-    archive_db = {i:db[item[0]] for i, item in enumerate(db.items()) if item[1]['hash'] in current_hashes}
-    archive_hashes = [v['hash'] for v in archive_db.values()]
-    new_files = [(str(path), hash) for path, hash in filepaths if hash not in archive_hashes and verify_image(path)]
-
-    return(archive_db, new_files)
+def archive_loader(filepaths: list[str], db: Any) -> tuple[set[str], list[str]]:
+    # `filepaths` already only contains files that passed verify_image upstream
+    # in get_valid_images, so re-verifying here is wasted work. Use a set for
+    # O(1) hash lookups instead of an O(n) `in` against a list.
+    current_hashes = {h for _, h in filepaths}
+    archive_db = {
+        i: db[item[0]]
+        for i, item in enumerate(db.items())
+        if item[1]['hash'] in current_hashes
+    }
+    archive_hashes = {v['hash'] for v in archive_db.values()}
+    new_files = [
+        (str(path), h)
+        for path, h in filepaths
+        if h not in archive_hashes
+    ]
+    return archive_db, new_files
 
 def db_loader(dbpath: str, device: device) -> Any:
     '''

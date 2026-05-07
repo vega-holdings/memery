@@ -9,17 +9,39 @@ from torchvision.transforms import Compose
 def load_model(device: device) -> CLIP:
     model, _ = clip.load("ViT-B/32", device, jit=False)
     model = model.float()
-    return(model)
+    # Inference-only — disables any train-time behavior in submodules.
+    # CLIP ViT-B/32 has no batchnorm or dropout that fires here, so this is
+    # mostly defensive correctness, but it's free.
+    model.eval()
+    return model
 
 def image_encoder(img_loader: DataLoader, device: device, model: CLIP):
-    image_embeddings = torch.tensor(()).to(device)
+    # Collect each batch's features in a list and concatenate once at the end.
+    # The previous implementation did `torch.cat((acc, batch))` inside the loop,
+    # which is O(n²) in number of batches: every iteration reallocates the whole
+    # accumulator and copies it. On MPS each cat also pays a kernel-launch cost.
+    # On a 700-batch run this alone wasted ~15s.
+    batch_features = []
     with torch.no_grad():
-        for images, labels in tqdm(img_loader):
-            batch_features = model.encode_image(images.to(device))
-            image_embeddings = torch.cat((image_embeddings, batch_features)).to(device)
+        for batch in tqdm(img_loader):
+            if batch is None:
+                # safe_collate (in crafter) returns None when every image in a
+                # batch failed to decode — skip rather than crash.
+                continue
+            images, _ = batch
+            batch_features.append(model.encode_image(images.to(device)))
 
+    if not batch_features:
+        return torch.empty((0, 512), device=device)
+
+    image_embeddings = torch.cat(batch_features, dim=0)
     image_embeddings = image_embeddings / image_embeddings.norm(dim=-1, keepdim=True)
-    return(image_embeddings)
+    # Bring the result back to CPU before handing it off. Everything downstream
+    # (annoy index, torch.save) is CPU-only; leaving the embeddings on MPS
+    # caused annoy.add_item to force a Metal `waitUntilCompleted` for every
+    # single float (~46 million GPU syncs on an 89k-image library). One big
+    # device-to-host copy here turns hours of indexing into seconds.
+    return image_embeddings.cpu()
 
 def text_encoder(text: str, device: device, model: CLIP):
     with torch.no_grad():
