@@ -5,7 +5,7 @@ description = ""
 authors = ["deepfates <deepfates@gmail.com>", "wkrettek <warrenkrettek@gmail.com>"]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.13"
+python = ">=3.10,<3.13"
 torch = "^2.2.0"
 annoy = "^1.17.0"
 torchvision = "^0.17.0"
