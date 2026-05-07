@@ -14,6 +14,11 @@ tags
 *.ann
 *.pt
 
+# local-only workspace state
+.claude/
+.venv/
+.pytest_cache/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
