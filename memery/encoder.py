@@ -16,32 +16,50 @@ def load_model(device: device) -> CLIP:
     return model
 
 def image_encoder(img_loader: DataLoader, device: device, model: CLIP):
-    # Collect each batch's features in a list and concatenate once at the end.
-    # The previous implementation did `torch.cat((acc, batch))` inside the loop,
-    # which is O(n²) in number of batches: every iteration reallocates the whole
-    # accumulator and copies it. On MPS each cat also pays a kernel-launch cost.
-    # On a 700-batch run this alone wasted ~15s.
-    batch_features = []
+    """Encode a DataLoader's worth of images to L2-normalized CLIP features.
+
+    Returns ``(embeddings, labels)``:
+      * ``embeddings``: ``(K, 512)`` CPU tensor of unit-norm features, where
+        ``K`` is the number of images that *successfully* survived decoding
+        and collation. May be smaller than ``len(dataset)`` if any items
+        were dropped by ``crafter.safe_collate``.
+      * ``labels``: ``(K,)`` CPU long tensor mapping each row of
+        ``embeddings`` back to its original index in ``new_files``. The
+        caller uses this to keep file paths and embeddings aligned even
+        when some files failed to decode mid-batch.
+
+    Implementation notes:
+      * Features are accumulated in a Python list and concatenated once at
+        the end. The previous in-loop ``torch.cat`` was O(n²) in the number
+        of batches and on MPS paid a Metal kernel-launch cost per concat —
+        ~15s wasted on a 702-batch run.
+      * The final tensor is moved to CPU here. Everything downstream (annoy,
+        torch.save) is CPU-only; leaving embeddings on MPS caused
+        ``annoy.add_item`` to force a Metal ``waitUntilCompleted`` for every
+        single float, i.e. ~46M GPU syncs on an 89k-image library.
+    """
+    feature_chunks = []
+    label_chunks = []
     with torch.no_grad():
         for batch in tqdm(img_loader):
             if batch is None:
-                # safe_collate (in crafter) returns None when every image in a
-                # batch failed to decode — skip rather than crash.
+                # safe_collate returns None when every image in a batch
+                # failed to decode — skip rather than crash.
                 continue
-            images, _ = batch
-            batch_features.append(model.encode_image(images.to(device)))
+            images, labels = batch
+            feature_chunks.append(model.encode_image(images.to(device)))
+            label_chunks.append(labels)
 
-    if not batch_features:
-        return torch.empty((0, 512), device=device)
+    if not feature_chunks:
+        return (
+            torch.empty((0, 512)),
+            torch.empty((0,), dtype=torch.long),
+        )
 
-    image_embeddings = torch.cat(batch_features, dim=0)
+    image_embeddings = torch.cat(feature_chunks, dim=0)
     image_embeddings = image_embeddings / image_embeddings.norm(dim=-1, keepdim=True)
-    # Bring the result back to CPU before handing it off. Everything downstream
-    # (annoy index, torch.save) is CPU-only; leaving the embeddings on MPS
-    # caused annoy.add_item to force a Metal `waitUntilCompleted` for every
-    # single float (~46 million GPU syncs on an 89k-image library). One big
-    # device-to-host copy here turns hours of indexing into seconds.
-    return image_embeddings.cpu()
+    surviving_labels = torch.cat(label_chunks, dim=0)
+    return image_embeddings.cpu(), surviving_labels.cpu()
 
 def text_encoder(text: str, device: device, model: CLIP):
     with torch.no_grad():
