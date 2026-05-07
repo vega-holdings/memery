@@ -40,7 +40,17 @@ def serve(root: Optional[str] = typer.Argument(None)):
 @app.command()
 def build(
     root: str = typer.Argument('.'),
-    workers: int = typer.Option(default=0)
+    workers: int = typer.Option(
+        2,
+        "--workers", "-w",
+        help=(
+            "DataLoader workers for image preprocessing. Measured on macOS/MPS: "
+            "2 wins ~15% on realistic corpora (4000+ images). Higher counts hurt "
+            "because the GPU is a serial bottleneck and IPC overhead piles up. "
+            "Pass 0 to disable workers entirely (slightly faster on tiny folders, "
+            "or as a fallback if multiprocessing misbehaves in your environment)."
+        ),
+    ),
     ):
     '''
     Indexes the directory and all subdirectories
