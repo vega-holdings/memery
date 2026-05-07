@@ -59,7 +59,17 @@ class Memery():
             # Crafting and encoding
             crafted_files = crafter.crafter(new_files, device, num_workers=num_workers)
             model = self.get_model()
-            new_embeddings = encoder.image_encoder(crafted_files, device, model)
+            new_embeddings, surviving = encoder.image_encoder(crafted_files, device, model)
+
+            # `surviving` maps embedding rows back to indices into new_files;
+            # it can be shorter than new_files if any image failed to decode
+            # after passing verify_image (truncated files, weird color spaces).
+            # Filter new_files down to the same set so join_all can correlate
+            # by position without misalignment.
+            if len(surviving) != len(new_files):
+                dropped = len(new_files) - len(surviving)
+                print(f"Skipped {dropped} image(s) that failed to decode")
+                new_files = [new_files[int(i)] for i in surviving.tolist()]
 
             # Reindexing
             db = indexer.join_all(archive_db, new_files, new_embeddings)
